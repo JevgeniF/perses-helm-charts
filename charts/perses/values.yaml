@@ -38,10 +38,10 @@ serviceAccount:
 service:
   # -- Annotations to add to the service
   annotations: {}
-  # -- Labeles to add to the service
+  # -- Labels to add to the service
   labels: {}
-  # -- Service Type
-  type: "ClusterIP"
+  # -- Service Type (ClusterIP is internal to the cluster)
+  type: "ClusterIP"  # This makes the service internal to the Kubernetes cluster
   # -- Service Port Name
   portName: http
   # -- Service Port
@@ -55,12 +55,11 @@ annotations: {}
 # -- Number of pod replicas.
 replicas: 1
 
-# -- Log level for Perses be configured in
+# -- Log level for Perses to be configured in
 # available options "panic", "error", "warning", "info", "debug", "trace"
 logLevel: info
 
 # -- Liveness probe configuration
-# Ref: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
 livenessProbe:
   enabled: true
   initialDelaySeconds: 10
@@ -70,7 +69,6 @@ livenessProbe:
   failureThreshold: 5
 
 # -- Readiness probe configuration
-# Ref: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
 readinessProbe:
   enabled: true
   initialDelaySeconds: 5
@@ -86,30 +84,35 @@ volumes: []
 volumeMounts: []
 
 # -- Resource limits & requests.
-# Update according to your own use case as these values might be too low for a typical deployment.
-# ref: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
 resources: {}
 
 # -- Perses configuration file
-# ref: https://github.com/perses/perses/blob/main/docs/user-guides/configuration.md
 config:
-  # -- Annotations for config
   annotations: {}
 
   security:
-    # -- Configure Perses instance as readonly
     readOnly: false
-    # -- Enable Authentication
-    enableAuth: false
-    # -- cookie config
     cookie:
       same_site: lax
-      secure: false
-      # [ same_site: < enum | possibleValue = 'strict' | 'lax' | 'none' > | default = lax ]
-      # Set to true if you host Perses behind HTTPS. Default is false
-      # [ secure: <boolean> | default = false ]
+      secure: true
+    enableAuth: true
+    authorization:
+      guest_permissions:
+        - actions:
+          - "create"
+          scopes: ["Project", "Datasource", "Dashboard", "Role", "RoleBinding"]
+    authentication:
+      access_token_ttl: "12h"
+      providers:
+        oidc:
+          - slug_id: zitadel
+            name: "Zitadel.cloud"
+            client_id: "280096948902559246"
+            client_secret: "cVxwKmrGmCTIiGOOKn2Z4hk507HZ0gBWWfcEU5ZJi1NnJ08bUpanL6vexJ5PxJkO"
+            issuer: "https://entigo-dev-if3upz.zitadel.cloud"
+            redirect_uri: "http://localhost:3000/api/auth/providers/oidc/zitadel/callback"
+            scopes: [ "openid", "profile" ]
 
-  # -- Schemas paths
   schemas:
     panels_path: "/etc/perses/cue/schemas/panels"
     queries_path: "/etc/perses/cue/schemas/queries"
@@ -117,104 +120,52 @@ config:
     variables_path: "/etc/perses/cue/schemas/variables"
     interval: "5m"
 
-  # -- Important dashboards list
-  important_dashboards:
-    []
-    # - project: "perses"
-    #   dashboard: "Demo"
+  important_dashboards: []
 
-  # -- Database config based on data base type
   database:
-    # -- file system configs
     file:
       folder: /perses
       extension: json
-    # -- SQL Config
-    sql:
-      {}
-      # user: "user"
-      # password: "password"
-      # net: "tcp"
-      # addr: "localhost:3306"
-      # db_name: "perses"
-      # allow_native_passwords: true
+    sql: {}
 
-  # -- provisioning config
   provisioning:
     folders:
-    - /etc/perses/provisioning
+      - /etc/perses/provisioning
     interval: 10s
 
-# --  Sidecar configuration that watches for ConfigMaps with the specified label/labelValue and loads them into Perses provisioning
+# -- Sidecar configuration that watches for ConfigMaps with the specified label/labelValue and loads them into Perses provisioning
 sidecar:
-  # -- Enable the sidecar container for ConfigMap provisioning
   enabled: false
-  image: 
-    # -- Container image repository for the sidecar
+  image:
     repository: kiwigrid/k8s-sidecar
-    # -- Container image tag for the sidecar
     tag: 1.28.0
-  # -- Label key to watch for ConfigMaps containing Perses resources  
   label: "perses.dev/resource"
-  # -- Label value to watch for ConfigMaps containing Perses resources
   labelValue: "true"
 
 # -- Persistence parameters
 persistence:
-  # -- If disabled, it will use a emptydir volume
   enabled: false
-
-  # -- Specify the `storageClass` to provision the volume for the PVC. If you don't specify a `storageClass`, a default `storageClass` will be used.
-  # storageClass: ""
-
-  # -- PVC Access Modes for data volume
   accessModes:
     - ReadWriteOnce
-
-  # -- PVC Storage Request for data volume
   size: 8Gi
-
-  # -- Security context for the PVC when persistence is enabled
   securityContext:
     fsGroup: 2000
-
-  # -- Labels for the PVC
   labels: {}
-  # -- Annotations for the PVC
   annotations: {}
 
-# -- Configure the ingress resource that allows you to access Thanos Query Frontend
-# ref: https://kubernetes.io/docs/concepts/services-networking/ingress/
+# -- Configure the ingress resource that allows you to access Perses
 ingress:
-  # -- Enable ingress controller resource
   enabled: false
-
-  # -- Default host for the ingress resource
+  ingressClassName: ""
+  annotations: {}
   hosts:
     - host: perses.local
       paths:
         - path: /
           pathType: Prefix
-
-  # -- IngressClass that will be be used to implement the Ingress (Kubernetes 1.18+)
-  # This is supported in Kubernetes 1.18+ and required if you have more than one IngressClass marked as the default for your cluster .
-  # ref: https://kubernetes.io/blog/2020/04/02/improvements-to-the-ingress-api-in-kubernetes-1.18/
-  #
-  ingressClassName: ""
-
-  # -- Additional annotations for the Ingress resource. To enable certificate autogeneration, place here your cert-manager annotations.
-  # For a full list of possible ingress annotations, please see
-  # ref: https://github.com/kubernetes/ingress-nginx/blob/master/docs/user-guide/nginx-configuration/annotations.md
-  annotations: {}
-
-  # -- Ingress TLS configuration
   tls: []
-#    - secretName: ingress-cert
-#      hosts: []
 
-# -- Configure datasources
-# DEPRECATED: This field will be removed in the future release. Please use the 'sidecar' configuration to provision datasources.
-# ref: https://github.com/perses/perses/blob/90beed356243208f14cf2249bebb6f6222cb77ae/docs/datasource.md
+# -- Configure datasources (DEPRECATED in favor of sidecar provisioning)
 datasources:
   []
   # - kind: GlobalDatasource
